@@ -67,19 +67,22 @@ def task_project1():
     def find_frequent_cols(queries):
         os.system("pip install sql-metadata")
         from sql_metadata import Parser
-        counter = collections.Counter()
+        counter_query_level = collections.Counter()
+        counter_table_level = collections.Counter()
         for q in queries:
             parsed_q = Parser(q)
-            for col in parsed_q.columns_dict["where"]:
-                if "." not in col:
-                    col = parsed_q.tables[0] + "." + col
-                counter[col] += 1
-        return counter
+            columns = parsed_q.columns_dict["where"]
+            first_column = parsed_q.tables[0]
+            columns = list(map(lambda x: x if "." in x else ".".join((first_column, x)), columns))
+            columns.sort()
+            counter_query_level["+".join(columns)] += 1
+            for col in columns:
+                counter_table_level[col] += 1
+        return counter_table_level, counter_query_level
 
     def test_step_two():
         queries = filter_csv("postgresql-2022-02-15_172350.csv")
         counter = find_frequent_cols(queries)
-        print(counter)
 
     return {
         # A list of actions. This can be bash or Python callables.
@@ -87,10 +90,24 @@ def task_project1():
             # test_step_one,
             test_step_two,
             'echo "Faking action generation."',
-            'echo "SELECT 1;" > actions.sql',
-            'echo "SELECT 2;" >> actions.sql',
-            'echo \'{"VACUUM": true}\' > config.json',
+            # 'echo "SELECT 1;" > actions.sql',
+            # 'echo "SELECT 2;" >> actions.sql',
+            'echo \'{"VACUUM": false}\' > config.json',
         ],
+        'params':[
+            {
+                'name': 'workload_csv',
+                'short': 'w',
+                'default': '/tmp/epinions.csv'
+            },
+
+            {
+                'name': 'timeout',
+                'short': 't',
+                'default': '1m'
+            }
+
+        ]
         # Always rerun this task.
         "uptodate": [False],
         'verbosity': 2,

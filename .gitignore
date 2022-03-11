@@ -2,4 +2,5 @@
 actions.sql
 config.json
 postgresql-2022-02-15_172350.csv
+.doit.db.db
 __pycache__/
