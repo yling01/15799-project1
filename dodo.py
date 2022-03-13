@@ -99,8 +99,8 @@ def task_project1():
                 counter_table_level[col] += 1
         return counter_table_level, counter_query_level
 
-    def test_step_two():
-        queries = filter_csv("postgresql-2022-02-15_172350.csv")
+    def test_step_two(workload_csv):
+        queries = filter_csv(workload_csv)
         counter = find_frequent_cols(queries)
 
     return {
