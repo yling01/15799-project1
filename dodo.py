@@ -116,12 +116,14 @@ def task_project1():
         'params':[
             {
                 'name': 'workload_csv',
+                'long': 'workload_csv',
                 'short': 'w',
                 'default': '/tmp/epinions.csv'
             },
 
             {
                 'name': 'timeout',
+                'long': 'timeout',
                 'short': 't',
                 'default': '1m'
             }
