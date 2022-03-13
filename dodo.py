@@ -2,15 +2,16 @@ def task_project1_setup():
     import os
 
     def install_packages():
-        os.system("pip install psycopg2")
-        os.system("pip install pandas")
-        os.system("pip install sql-metadata")
+        os.system("pip3 install psycopg2")
+        os.system("pip3 install pandas")
+        os.system("pip3 install sql-metadata")
 
     return {
         # A list of actions. This can be bash or Python callables.
         "actions": [
-            install_packages,
             'echo "Faking action generation."',
+            install_packages,
+
         ],
         # Always rerun this task.
         "uptodate": [False],
