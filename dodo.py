@@ -1,15 +1,33 @@
-import collections
-import os
-import pandas as pd
+def task_project1_setup():
+    import os
+
+    def install_packages():
+        os.system("pip install psycopg2")
+        os.system("pip install pandas")
+        os.system("pip install sql-metadata")
+
+    return {
+        # A list of actions. This can be bash or Python callables.
+        "actions": [
+            install_packages,
+            'echo "Faking action generation."',
+        ],
+        # Always rerun this task.
+        "uptodate": [False],
+        'verbosity': 2,
+    }
 
 def task_project1():
+    import collections
+    import pandas as pd
+    import psycopg2
+    from sql_metadata import Parser
+
     """
     Install psycopg2, required to establish connection to the database
     :return: connection, cursor
     """
-    def install_psycopg2(user, password):
-        os.system("pip install psycopg2")
-        import psycopg2
+    def establish_connection(user, password):
         conn = psycopg2.connect(f'dbname=benchbase user={user} password={password}')
         cur = conn.cursor()
         return conn, cur
@@ -46,7 +64,7 @@ def task_project1():
     Meta method to test adding/dropping indexes
     """
     def test_step_one():
-        conn, cur = install_psycopg2("TimLing", "TimLing")
+        conn, cur = establish_connection("TimLing", "TimLing")
         get_index(cur)
         drop_tpcc_indexes(cur)
         get_index(cur)
@@ -65,8 +83,8 @@ def task_project1():
         return clean_queries.values.tolist()
 
     def find_frequent_cols(queries):
-        os.system("pip install sql-metadata")
-        from sql_metadata import Parser
+
+
         counter_query_level = collections.Counter()
         counter_table_level = collections.Counter()
         for q in queries:
@@ -107,7 +125,7 @@ def task_project1():
                 'default': '1m'
             }
 
-        ]
+        ],
         # Always rerun this task.
         "uptodate": [False],
         'verbosity': 2,
