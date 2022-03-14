@@ -28,7 +28,7 @@ def task_project1():
     import psycopg2
     from sql_metadata import Parser
 
-    def establish_connection(database, user, password):
+    def establish_connection(database="project1db", user="project1user", password="project1pass"):
         """
         Establish connection to the DB using psycopg2
         @param database: DB name
@@ -70,13 +70,16 @@ def task_project1():
         cur.close()
         conn.close()
 
+    # TODO: Need to parse the returned value to extract out the table and the columns
     def get_unique_index(cur):
         """
         Retrieve unique indices from the DB
         @param cur: cursor from psycopg2
         @return: a list of current indices
+        @note: a primary key is considered unique in postgres, therefore, primary keys are also ignored
         """
-        cur.execute("SELECT tablename, indexname, indexdef FROM pg_indexes WHERE schemaname='public' AND NOT indexdef LIKE '%UNIQUE%'")
+        cur.execute(
+            "SELECT tablename, indexname FROM pg_indexes WHERE schemaname='public' AND NOT indexdef LIKE '%UNIQUE%'")
         return list(cur)
 
     def filter_csv(workload_csv, col=13):
@@ -200,6 +203,7 @@ def task_project1():
         print("\t{:<80}{:10.3f}%".format("update", num_update / num_queries * 100))
         print("\t{:<80}{:10.3f}%".format("insert", num_insert / num_queries * 100))
         print("\t{:<80}{:10.3f}%".format("select", num_select / num_queries * 100))
+        print("-" * 120)
 
     def dump_predicate_info(counter, description):
         """
@@ -218,30 +222,140 @@ def task_project1():
         print("-" * 120)
         for index, count in counter:
             print("\t{: <80}{: <10}".format(index, str(count)))
+        print("-" * 120)
+
+    def dump_build_index(candidate_indices):
+        print("=" * 120)
+        print("\n")
+        print("{: >50}".format("Dump candidate indices..."))
+        print("\n")
+        print("-" * 120)
+        print("{: <20}{: <80}".format("Type", "Statement"))
+        print("-" * 120)
+        for type, statement in candidate_indices:
+            print("{: <20}{: <80}".format(type, statement))
+        print("-" * 120)
+
+    def generate_index(candidate_indices):
+        statements = []
+        for candidate_index in candidate_indices:
+            simple_index_list = candidate_index.split("+")
+            table_referenced = None
+            columns_referenced = []
+            for simple_index in simple_index_list:
+                table, column = simple_index.split(".")
+                if table_referenced != table and table_referenced is not None:
+                    print("\t\t\nERROR: TRYING TO BUILD MULTI-COLUMN INDEX ACROSS DIFFERENT TABLES!")
+                    print("\t\tSELECTING ARBITRARILY!\n")
+                    break
+                table_referenced = table
+                columns_referenced.append(column)
+
+            if table_referenced is None:
+                print("\t\t\nERROR: TABLE IS NOT SPECIFIED, INDEX IS NOT BUILT!\n")
+            else:
+                index_name = "_".join(columns_referenced)
+                index_name = "_".join(("idx", table_referenced, index_name))
+                command = "CREATE INDEX IF NOT EXISTS {} ON {} USING btree ({})".format(index_name, table_referenced,
+                                                                                        ", ".join(columns_referenced))
+                statements.append(("Simple" if len(columns_referenced) == 1 else "Composite", command))
+        return statements
 
     def test_step_two(workload_csv, verbose=True):
         all_queries = filter_csv(workload_csv)
-        _, queries_with_predicate = filter_queries(all_queries, K.WHERE)
-        _, select_queries_with_predicate = filter_queries(queries_with_predicate, K.SELECT)
-        _, update_queries_with_predicate = filter_queries(queries_with_predicate, K.UPDATE)
+        num_queries = len(all_queries)
 
-        select_counter_table_level, select_counter_query_level, _ = find_frequent_cols(select_queries_with_predicate)
-        update_counter_table_level, update_counter_query_level, _ = find_frequent_cols(update_queries_with_predicate)
+        _, queries_with_predicate = filter_queries(all_queries, K.WHERE)
+
+        counter_simple, counter_composite, _ = find_frequent_cols(queries_with_predicate)
+        candidate_indices_to_percent_usage = {}
+        simple_to_composite_index = collections.defaultdict(set)
+
+        """
+        Iterate over all referenced composite columns (can be simple) in the predicates.
+        Add the multi-column index to the candidate_indices_to_percent_usage along with the percent usage 
+        if the composite columns are referenced more than the threshold (K.REFERENCE_CUTOFF_LOW).
+        Add the record to simple_to_composite_index for all simple column index in the multi-column index.
+        """
+        for composite_index, occurance in counter_composite:
+            percent_usage = occurance / num_queries
+            if percent_usage >= K.REFERENCE_CUTOFF_LOW:
+                candidate_indices_to_percent_usage[composite_index] = percent_usage
+                for simple_index in composite_index.split("+"):
+                    simple_to_composite_index[simple_index].add(composite_index)
+            else:
+                break
+
+        """
+        Iterate over all referenced simple columns in the predicates.
+        Add the simple index to the candidate_indices_to_percent_usage along with the percent usage 
+        if the simple columns are referenced more than the threshold (K.SIMPLE_REFERENCE_CUT_OFF_HIGH) 
+        and if the simple column has not been added as part of the multi-column index.
+        Add the record to simple_to_composite_index.
+        """
+        for simple_index, occurance in counter_simple:
+            percent_usage = occurance / num_queries
+            if percent_usage >= K.SIMPLE_REFERENCE_CUT_OFF_HIGH:
+                if simple_index not in candidate_indices_to_percent_usage:
+                    candidate_indices_to_percent_usage[simple_index] = percent_usage
+                    simple_to_composite_index[simple_index].add(simple_index)
+            else:
+                break
+
+        print("Before filtering")
+        for candidate_indices in candidate_indices_to_percent_usage:
+            print(candidate_indices)
+
         _, update_queries = filter_queries(all_queries, K.UPDATE)
         update_target, _ = find_update_target(update_queries)
+
+        """
+        Iterate over all update columns.
+        Remove all multi-column (single column included) indexes 
+        if one of the single column update happens more than the threshold (K.UPDATE_CUTOFF)
+        """
+        for update_column, occurance in update_target:
+            percent_usage = occurance / num_queries
+            if percent_usage >= K.UPDATE_CUTOFF:
+                if update_column in simple_to_composite_index:
+                    for composite_index in simple_to_composite_index[update_column]:
+                        if candidate_indices_to_percent_usage[composite_index] <= K.COMPOSITE_REFERENCE_CUTOFF_HIGH:
+                            del candidate_indices_to_percent_usage[composite_index]
+                            simple_to_composite_index[update_column].remove(composite_index)
+
+        conn, cur = establish_connection()
+        current_indices = get_unique_index(cur)
+        indices_to_remove = []
+
+        """
+        Iterate over all current indices.
+        If current index is not part of the multi-column index, remove it.
+        Note that if the current index is not one of the recommended indices but made up of one of the 
+        recommended indices, we keep it. 
+        """
+        for table, index in current_indices:
+            table_dot_index = ".".join((table, index))
+            if table_dot_index not in simple_to_composite_index or len(simple_to_composite_index[table_dot_index]) == 0:
+                indices_to_remove.append(table_dot_index)
+
+        print("After filtering")
+        for candidate_indices in candidate_indices_to_percent_usage:
+            print(candidate_indices)
+
+        statements = generate_index(list(candidate_indices_to_percent_usage.keys()))
+
+        close_connection(conn, cur)
 
         if verbose:
             dump_workload_info(all_queries)
             print("\n")
-            dump_predicate_info(select_counter_table_level, "Select queries simple index")
+            dump_predicate_info(counter_simple, "Select/Update simple candidate indices")
             print("\n")
-            dump_predicate_info(select_counter_query_level, "Select queries composite index")
-            print("\n")
-            dump_predicate_info(update_counter_table_level, "Update queries simple index")
-            print("\n")
-            dump_predicate_info(update_counter_query_level, "Update queries composite index")
+            dump_predicate_info(counter_composite, "Select/Update composite candidate indices")
             print("\n")
             dump_predicate_info(update_target, "Update target")
+            print("\n")
+            dump_build_index(statements)
             print("\n")
 
     return {
@@ -249,9 +363,6 @@ def task_project1():
         "actions": [
             # test_step_one,
             test_step_two,
-            'echo "Faking action generation."',
-            # 'echo "SELECT 1;" > actions.sql',
-            # 'echo "SELECT 2;" >> actions.sql',
             'echo \'{"VACUUM": false}\' > config.json',
         ],
         'params': [
