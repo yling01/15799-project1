@@ -1,9 +1,9 @@
 import constants as K
 import time
+import os
 
 
 def task_project1_setup():
-    import os
 
     def install_packages():
         os.system("pip3 install psycopg2")
@@ -306,7 +306,7 @@ def task_project1():
                 statements.append(("Simple" if len(columns_referenced) == 1 else "Composite", command))
         return statements
 
-    def test_step_two(workload_csv, verbose=True):
+    def test_step_two(workload_csv, verbose):
         if verbose:
             start_time = time.time()
 
@@ -387,7 +387,7 @@ def task_project1():
         Note that if the current index is not one of the recommended indices but made up of one of the 
         recommended indices, we keep it. 
         """
-        #TODO: This is only true for single column index
+        #TODO: This only works for single column indexes
         for table_dot_column, index in current_indices:
             if table_dot_column not in simple_to_composite_index or len(simple_to_composite_index[table_dot_column]) == 0:
                 indices_to_remove.append(index)
@@ -423,6 +423,16 @@ def task_project1():
             print("\n")
             print("\t\t--- Program exists properly, total time spent: %s seconds ---" % (time.time() - start_time))
 
+        with open("actions.sql", "w+") as f:
+            for _, s in build_statements:
+                f.write(s)
+                f.write("\n")
+
+            for s in drop_statements:
+                f.write(s)
+                f.write("\n")
+
+
     return {
         # A list of actions. This can be bash or Python callables.
         "actions": [
@@ -443,6 +453,13 @@ def task_project1():
                 'long': 'timeout',
                 'short': 't',
                 'default': '1m'
+            },
+
+            {
+                'name': 'verbose',
+                'long': 'verbose',
+                'short': 'v',
+                'default': 'True'
             }
 
         ],
