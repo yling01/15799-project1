@@ -27,6 +27,7 @@ def task_project1():
     import pandas as pd
     import psycopg2
     from sql_metadata import Parser
+    import re
 
     def establish_connection(database="project1db", user="project1user", password="project1pass"):
         """
@@ -71,6 +72,7 @@ def task_project1():
         conn.close()
 
     # TODO: Need to parse the returned value to extract out the table and the columns
+    # m = re.match(r'CREATE UNIQUE INDEX (\S+) ON (\S+) USING btree \((\S+)\)', query
     def get_unique_index(cur):
         """
         Retrieve unique indices from the DB
@@ -78,9 +80,16 @@ def task_project1():
         @return: a list of current indices
         @note: a primary key is considered unique in postgres, therefore, primary keys are also ignored
         """
+        existing_indices = []
         cur.execute(
-            "SELECT tablename, indexname FROM pg_indexes WHERE schemaname='public' AND NOT indexdef LIKE '%UNIQUE%'")
-        return list(cur)
+            "SELECT tablename, indexname, indexdef FROM pg_indexes WHERE schemaname='public' AND NOT indexdef LIKE '%UNIQUE%'")
+        for table, index, indexdef in cur:
+            m = re.match(r'CREATE INDEX .+? ON .+? USING .+? \((?P<column>\S+)\)', indexdef)
+            if m is None:
+                print("\t\t\nERROR: PATTERN MATCH FAILED, EXISITING INDEX {} NOT PARSED!".format(index))
+                continue
+            existing_indices.append(".".join((table, m.group('column'))))
+        return existing_indices
 
     def filter_csv(workload_csv, col=13):
         """
@@ -224,7 +233,7 @@ def task_project1():
             print("\t{: <80}{: <10}".format(index, str(count)))
         print("-" * 120)
 
-    def dump_build_index(candidate_indices):
+    def dump_index_info(indices):
         print("=" * 120)
         print("\n")
         print("{: >50}".format("Dump candidate indices..."))
@@ -232,7 +241,7 @@ def task_project1():
         print("-" * 120)
         print("{: <20}{: <80}".format("Type", "Statement"))
         print("-" * 120)
-        for type, statement in candidate_indices:
+        for type, statement in indices:
             print("{: <20}{: <80}".format(type, statement))
         print("-" * 120)
 
@@ -333,8 +342,7 @@ def task_project1():
         Note that if the current index is not one of the recommended indices but made up of one of the 
         recommended indices, we keep it. 
         """
-        for table, index in current_indices:
-            table_dot_index = ".".join((table, index))
+        for table_dot_index, index in current_indices:
             if table_dot_index not in simple_to_composite_index or len(simple_to_composite_index[table_dot_index]) == 0:
                 indices_to_remove.append(table_dot_index)
 
@@ -355,7 +363,7 @@ def task_project1():
             print("\n")
             dump_predicate_info(update_target, "Update target")
             print("\n")
-            dump_build_index(statements)
+            dump_index_info(statements)
             print("\n")
 
     return {
