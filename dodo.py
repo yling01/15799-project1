@@ -1,4 +1,5 @@
 import constants as K
+import time
 
 
 def task_project1_setup():
@@ -70,6 +71,7 @@ def task_project1():
         cur.close()
         conn.close()
 
+    # TODO: what if an existing index is a multi column index?
     def get_unique_index(cur):
         """
         Retrieve unique indices from the DB
@@ -85,7 +87,8 @@ def task_project1():
             if m is None:
                 print("\t\t\nERROR: PATTERN MATCH FAILED, EXISITING INDEX {} NOT PARSED!".format(index))
                 continue
-            existing_indices.append(".".join((table, m.group('column'))))
+            table_dot_column = ".".join((table, m.group('column')))
+            existing_indices.append((table_dot_column, index))
         return existing_indices
 
     def filter_csv(workload_csv, col=13):
@@ -230,26 +233,40 @@ def task_project1():
             print("\t{: <80}{: <10}".format(index, str(count)))
         print("-" * 120)
 
-    def print_build_index_statements(indices):
+    def print_statements(statements, description):
         """
-        Helper method to print out build index statements
-        @param indices: a list of (type, sql statement) tuples, both are of string type
+        Helper method to print out build index build_statements
+        @param statements: a list of (type, sql statement) tuples, both are of string type
+        @param description: description of the build_statements
         @return: nothing
         """
         print("=" * 120)
         print("\n")
-        print("{: >50}".format("Dump candidate indices..."))
+        print("{: >50}".format("Dump build_statements..."))
+        print("{: >50}".format(description))
         print("\n")
         print("-" * 120)
-        print("{: <20}{: <80}".format("Type", "Statement"))
+        print("{: >10}{: >100}".format("Type", "Statement"))
         print("-" * 120)
-        for type, statement in indices:
-            print("{: <20}{: <80}".format(type, statement))
+        for type, statement in statements:
+            print("{: <10}{: >100}".format(type, statement))
         print("-" * 120)
+
+    def generate_drop_index_statements(candidate_indices):
+        """
+        Generate drop index build_statements from a list of candidate indices.
+        Candidate indices should be the index name from the current database.
+        @param candidate_indices: a list of current indices
+        @return: a list of drop build_statements
+        """
+        statements = []
+        for index in candidate_indices:
+            statements.append("DROP INDEX IF EXISTS {}".format(index))
+        return statements
 
     def generate_build_index_statements(candidate_indices):
         """
-        Generate build index statements from a list of candidate indices.
+        Generate build index build_statements from a list of candidate indices.
         Candidate indices should be in the following format:
 
             Single-column index:
@@ -259,7 +276,7 @@ def task_project1():
                 table_name.column_name1+table_name.column_name2
 
         @param candidate_indices: a list of candidate indices
-        @return: a list of sql statements as strings
+        @return: a list of sql build_statements as strings
         """
         statements = []
         for candidate_index in candidate_indices:
@@ -290,6 +307,9 @@ def task_project1():
         return statements
 
     def test_step_two(workload_csv, verbose=True):
+        if verbose:
+            start_time = time.time()
+
         all_queries = filter_csv(workload_csv)
         num_queries = len(all_queries)
 
@@ -330,9 +350,15 @@ def task_project1():
             else:
                 break
 
-        print("Before filtering")
-        for candidate_indices in candidate_indices_to_percent_usage:
-            print(candidate_indices)
+        if verbose:
+            print("=" * 120)
+            print("\n")
+            print("{:<50}".format("Following indices are recommended before analyzing update queries"))
+            print("\n")
+            print("-" * 120)
+            for candidate_indices in candidate_indices_to_percent_usage:
+                print("{:<50}".format(candidate_indices))
+            print("-" * 120)
 
         _, update_queries = filter_queries(all_queries, K.UPDATE)
         update_target, _ = find_update_target(update_queries)
@@ -361,15 +387,24 @@ def task_project1():
         Note that if the current index is not one of the recommended indices but made up of one of the 
         recommended indices, we keep it. 
         """
-        for table_dot_index, index in current_indices:
-            if table_dot_index not in simple_to_composite_index or len(simple_to_composite_index[table_dot_index]) == 0:
-                indices_to_remove.append(table_dot_index)
+        #TODO: This is only true for single column index
+        for table_dot_column, index in current_indices:
+            if table_dot_column not in simple_to_composite_index or len(simple_to_composite_index[table_dot_column]) == 0:
+                indices_to_remove.append(index)
 
-        print("After filtering")
-        for candidate_indices in candidate_indices_to_percent_usage:
-            print(candidate_indices)
+        drop_statements = generate_drop_index_statements(indices_to_remove)
 
-        statements = generate_build_index_statements(list(candidate_indices_to_percent_usage.keys()))
+        if verbose:
+            print("=" * 120)
+            print("\n")
+            print("{:<50} Following indices are recommended after analyzing update queries")
+            print("\n")
+            print("-" * 120)
+            for candidate_indices in candidate_indices_to_percent_usage:
+                print("{:<50}".format(candidate_indices))
+            print("-" * 120)
+
+        build_statements = generate_build_index_statements(list(candidate_indices_to_percent_usage.keys()))
 
         close_connection(conn, cur)
 
@@ -382,8 +417,11 @@ def task_project1():
             print("\n")
             dump_predicate_info(update_target, "Update target")
             print("\n")
-            print_build_index_statements(statements)
+            print_statements(build_statements, "build index statements")
             print("\n")
+            print_statements(list(map(lambda x: ("DROP", x), drop_statements)), "drop index statements")
+            print("\n")
+            print("\t\t--- Program exists properly, total time spent: %s seconds ---" % (time.time() - start_time))
 
     return {
         # A list of actions. This can be bash or Python callables.
