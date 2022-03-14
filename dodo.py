@@ -406,10 +406,12 @@ def task_project1():
         with open("actions.sql", "w+") as f:
             for _, s in build_statements:
                 f.write(s)
+                f.write(";")
                 f.write("\n")
 
             for s in drop_statements:
                 f.write(s)
+                f.write(";")
                 f.write("\n")
 
 
