@@ -28,63 +28,65 @@ def task_project1():
     import psycopg2
     from sql_metadata import Parser
 
-    """
-    Install psycopg2, required to establish connection to the database
-    :return: connection, cursor
-    """
-
-    def establish_connection(user, password):
-        conn = psycopg2.connect(f'dbname=benchbase user={user} password={password}')
+    def establish_connection(database, user, password):
+        """
+        Establish connection to the DB using psycopg2
+        @param database: DB name
+        @param user: username
+        @param password: password
+        @return:
+            conn: connection
+            cur: cursor
+        """
+        conn = psycopg2.connect(f'dbname={database} user={user} password={password}')
         cur = conn.cursor()
         return conn, cur
 
-    """
-    Drop two non-unique indexes
-    """
-
     def drop_tpcc_indexes(cur):
+        """
+        Drop two TPCC indices
+        @param cur: cursor from psycopg2
+        @return: nothing
+        """
         cur.execute("DROP INDEX IF EXISTS idx_customer_name")
         cur.execute("DROP INDEX IF EXISTS idx_order")
 
-    """
-    Add the indexes back
-    """
-
     def add_tpcc_indexes(cur):
+        """
+        Add the two indices back
+        @param cur: cursor from psycopg2
+        @return: nothing
+        """
         cur.execute("CREATE INDEX idx_customer_name ON public.customer USING btree (c_w_id, c_d_id, c_last, c_first)")
         cur.execute("CREATE INDEX idx_order ON public.oorder USING btree (o_w_id, o_d_id, o_c_id, o_id)")
 
-    """
-    Close connection
-    """
-
     def close_connection(conn, cur):
+        """
+        Close connection to DB
+        @param conn: connection to DB
+        @param cur: cursor from psycopg2
+        @return: nothing
+        """
         cur.close()
         conn.close()
 
-    """
-    Get the number indexes
-    """
-
-    def get_index(cur):
-        cur.execute("SELECT indexname FROM pg_indexes WHERE schemaname = 'public'")
-        print(f'Number of indexes: {len(list(cur))}')
-
-    """
-    Meta method to test adding/dropping indexes
-    """
-
-    def test_step_one():
-        conn, cur = establish_connection("TimLing", "TimLing")
-        get_index(cur)
-        drop_tpcc_indexes(cur)
-        get_index(cur)
-        add_tpcc_indexes(cur)
-        get_index(cur)
-        close_connection(conn, cur)
-        return True
+    def get_unique_index(cur):
+        """
+        Retrieve unique indices from the DB
+        @param cur: cursor from psycopg2
+        @return: a list of current indices
+        """
+        cur.execute("SELECT tablename, indexname, indexdef FROM pg_indexes WHERE schemaname='public' AND NOT indexdef LIKE '%UNIQUE%'")
+        return list(cur)
 
     def filter_csv(workload_csv, col=13):
+        """
+        Read query logs from the csv file and get clean sql queries as strings
+        @param workload_csv: workload (csv) path
+        @param col: query log column (tries every column if fails to retrieve queries from default column
+        @return: pandas dataframe of clean sql queries as strings
+        """
+
         # read workload csv using the default column only
         df = pd.read_csv(workload_csv, header=None, usecols=[col])
         all_queries = df[col]
@@ -110,32 +112,74 @@ def task_project1():
         return clean_queries
 
     def filter_queries(all_queries, keyword):
+        """
+        Filter queries by keyword
+        @param all_queries: pandas dataframe of clean sql queries as strings
+        @param keyword: keyword to be filtered against
+        @return:
+            number of target queries
+            pandas dataframe of target queries
+        """
         target_queries = all_queries[all_queries.str.contains(keyword, case=False)]
-
         return len(target_queries), target_queries
 
     def find_frequent_cols(queries):
-        # query level counter keeps columns used in a single query as a separate entry
-        counter_query_level = collections.Counter()
-        # table level counter only cares about the columns used
-        counter_table_level = collections.Counter()
+        """
+        Get the columns that are referenced in the WHERE predicate
+        @param queries: pandas dataframe of sql queries as strings
+        @return:
+            counter dictionary of simple column reference (sorted descendingly)
+            counter dictionary of composite column reference (sorted descendingly)
+            number of failed queries
+        """
+        # keeps columns reference together as a separate entry
+        counter_composite_columns = collections.Counter()
+        # entries are always single column
+        counter_simple_columns = collections.Counter()
         # record number of queries that could not be processed
         num_failed_queries = 0
         for q in queries:
             parsed_q = Parser(q)
+            # sql_meta data sometimes fail to process strings containing quotation marks
             try:
                 columns = parsed_q.columns_dict[K.WHERE]
-                first_column = parsed_q.tables[0]
-                columns = list(map(lambda x: x if "." in x else ".".join((first_column, x)), columns))
+                table = parsed_q.tables[0]
+                columns = list(map(lambda x: x if "." in x else ".".join((table, x)), columns))
                 columns.sort()
-                counter_query_level["+".join(columns)] += 1
+                counter_composite_columns["+".join(columns)] += 1
                 for col in columns:
-                    counter_table_level[col] += 1
-            except Exception as e:
+                    counter_simple_columns[col] += 1
+            except Exception:
                 num_failed_queries += 1
-        return counter_table_level.most_common(), counter_query_level.most_common(), num_failed_queries
+        return counter_simple_columns.most_common(), counter_composite_columns.most_common(), num_failed_queries
+
+    def find_update_target(queries):
+        """
+        Get the columns where the updates take place
+        @param queries: pandas dataframe of sql queries as strings
+        @return:
+            counter dictionary of the columns where updates take place
+            number of failed queries
+        """
+        counter = collections.Counter()
+        num_failed_queries = 0
+        for q in queries:
+            parsed_q = Parser(q)
+            try:
+                column = parsed_q.columns_dict[K.UPDATE][0]
+                table = parsed_q.tables[0]
+                column = table + "." + column
+                counter[column] += 1
+            except Exception:
+                num_failed_queries += 1
+        return counter.most_common(), num_failed_queries
 
     def dump_workload_info(all_queries):
+        """
+        Helper method to print formated workload information
+        @param all_queries: pandas dataframe of all sql queries in a workload
+        @return: nothing
+        """
         num_queries = len(all_queries)
         num_queries_with_predicates, queries_with_predicate = filter_queries(all_queries, K.WHERE)
         num_delete, _ = filter_queries(all_queries, K.DELETE)
@@ -144,7 +188,9 @@ def task_project1():
         num_select, _ = filter_queries(all_queries, K.SELECT)
 
         print("=" * 120)
-        print("\tDumping workload information...\n")
+        print("\n")
+        print("{: >50}".format("Dump workload information..."))
+        print("\n")
         print("-" * 120)
         print("\t{:<80}{:>10}".format("Description", "metric"))
         print("-" * 120)
@@ -154,35 +200,49 @@ def task_project1():
         print("\t{:<80}{:10.3f}%".format("update", num_update / num_queries * 100))
         print("\t{:<80}{:10.3f}%".format("insert", num_insert / num_queries * 100))
         print("\t{:<80}{:10.3f}%".format("select", num_select / num_queries * 100))
-        print("\n\n")
 
-    def dump_predicate_info(counter_table_level, counter_query_level, num_failed_queries):
+    def dump_predicate_info(counter, description):
+        """
+        Helper method to print formated counter information
+        @param counter: counter dictionary (k: column name, v: number of occurrence)
+        @param description: description of the counter dictionary
+        @return: nothing
+        """
         print("=" * 120)
-        print("\tDump predicate information...")
-        if num_failed_queries == 0:
-            print("\tAll queries processed successfully...")
-        else:
-            print("\t{} queries cannot be processed...".format(num_failed_queries))
+        print("\n")
+        print("{: >50}".format("Dump column information..."))
+        print("{: >50}".format(description))
+        print("\n")
         print("-" * 120)
-        print("\ttable level count:\n\t{: <80}{: <10}".format("Index", "Count"))
+        print("\t{: <80}{: <10}".format("Column", "Count"))
         print("-" * 120)
-        for index, count in counter_table_level:
+        for index, count in counter:
             print("\t{: <80}{: <10}".format(index, str(count)))
-        print("\n\n")
-        print("-" * 120)
-        print("\n\tquery level count:\n\t{0: <80}{1: <10}".format("Index", "Count"))
-        print("-" * 120)
-        for index, count in counter_query_level:
-            print("\t{: <80}{: <10}".format(index, str(count)))
-        print("\n\n")
 
     def test_step_two(workload_csv, verbose=True):
         all_queries = filter_csv(workload_csv)
         _, queries_with_predicate = filter_queries(all_queries, K.WHERE)
-        counter_table_level, counter_query_level, num_failed_queries = find_frequent_cols(queries_with_predicate)
+        _, select_queries_with_predicate = filter_queries(queries_with_predicate, K.SELECT)
+        _, update_queries_with_predicate = filter_queries(queries_with_predicate, K.UPDATE)
+
+        select_counter_table_level, select_counter_query_level, _ = find_frequent_cols(select_queries_with_predicate)
+        update_counter_table_level, update_counter_query_level, _ = find_frequent_cols(update_queries_with_predicate)
+        _, update_queries = filter_queries(all_queries, K.UPDATE)
+        update_target, _ = find_update_target(update_queries)
+
         if verbose:
             dump_workload_info(all_queries)
-            dump_predicate_info(counter_table_level, counter_query_level, num_failed_queries)
+            print("\n")
+            dump_predicate_info(select_counter_table_level, "Select queries simple index")
+            print("\n")
+            dump_predicate_info(select_counter_query_level, "Select queries composite index")
+            print("\n")
+            dump_predicate_info(update_counter_table_level, "Update queries simple index")
+            print("\n")
+            dump_predicate_info(update_counter_query_level, "Update queries composite index")
+            print("\n")
+            dump_predicate_info(update_target, "Update target")
+            print("\n")
 
     return {
         # A list of actions. This can be bash or Python callables.
