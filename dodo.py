@@ -231,6 +231,11 @@ def task_project1():
         print("-" * 120)
 
     def print_build_index_statements(indices):
+        """
+        Helper method to print out build index statements
+        @param indices: a list of (type, sql statement) tuples, both are of string type
+        @return: nothing
+        """
         print("=" * 120)
         print("\n")
         print("{: >50}".format("Dump candidate indices..."))
@@ -243,13 +248,29 @@ def task_project1():
         print("-" * 120)
 
     def generate_build_index_statements(candidate_indices):
+        """
+        Generate build index statements from a list of candidate indices.
+        Candidate indices should be in the following format:
+
+            Single-column index:
+                table_name.column_name
+
+            Multi-column index (note that table_name should be the same):
+                table_name.column_name1+table_name.column_name2
+
+        @param candidate_indices: a list of candidate indices
+        @return: a list of sql statements as strings
+        """
         statements = []
         for candidate_index in candidate_indices:
             simple_index_list = candidate_index.split("+")
             table_referenced = None
             columns_referenced = []
+            # iterate over each column inside of a multi-column index
             for simple_index in simple_index_list:
                 table, column = simple_index.split(".")
+
+                # cannot build a multi-column index that spans across different tables
                 if table_referenced != table and table_referenced is not None:
                     print("\t\t\nERROR: TRYING TO BUILD MULTI-COLUMN INDEX ACROSS DIFFERENT TABLES!")
                     print("\t\tSELECTING ARBITRARILY!\n")
@@ -257,6 +278,7 @@ def task_project1():
                 table_referenced = table
                 columns_referenced.append(column)
 
+            # table has to be specified
             if table_referenced is None:
                 print("\t\t\nERROR: TABLE IS NOT SPECIFIED, INDEX IS NOT BUILT!\n")
             else:
