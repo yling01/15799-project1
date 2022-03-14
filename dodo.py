@@ -12,9 +12,7 @@ def task_project1_setup():
     return {
         # A list of actions. This can be bash or Python callables.
         "actions": [
-            'echo "Faking action generation."',
             install_packages,
-
         ],
         # Always rerun this task.
         "uptodate": [False],
@@ -42,24 +40,6 @@ def task_project1():
         conn = psycopg2.connect(f'dbname={database} user={user} password={password}')
         cur = conn.cursor()
         return conn, cur
-
-    def drop_tpcc_indexes(cur):
-        """
-        Drop two TPCC indices
-        @param cur: cursor from psycopg2
-        @return: nothing
-        """
-        cur.execute("DROP INDEX IF EXISTS idx_customer_name")
-        cur.execute("DROP INDEX IF EXISTS idx_order")
-
-    def add_tpcc_indexes(cur):
-        """
-        Add the two indices back
-        @param cur: cursor from psycopg2
-        @return: nothing
-        """
-        cur.execute("CREATE INDEX idx_customer_name ON public.customer USING btree (c_w_id, c_d_id, c_last, c_first)")
-        cur.execute("CREATE INDEX idx_order ON public.oorder USING btree (o_w_id, o_d_id, o_c_id, o_id)")
 
     def close_connection(conn, cur):
         """
@@ -306,7 +286,7 @@ def task_project1():
                 statements.append(("Simple" if len(columns_referenced) == 1 else "Composite", command))
         return statements
 
-    def test_step_two(workload_csv, verbose):
+    def generate_actions(workload_csv, verbose):
         if verbose:
             start_time = time.time()
 
@@ -437,7 +417,7 @@ def task_project1():
         # A list of actions. This can be bash or Python callables.
         "actions": [
             # test_step_one,
-            test_step_two,
+            generate_actions,
             'echo \'{"VACUUM": false}\' > config.json',
         ],
         'params': [
@@ -459,7 +439,7 @@ def task_project1():
                 'name': 'verbose',
                 'long': 'verbose',
                 'short': 'v',
-                'default': 'True'
+                'default': False
             }
 
         ],
