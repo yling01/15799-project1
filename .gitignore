@@ -1,4 +1,5 @@
 .idea/
+grade.sh
 actions.sql
 config.json
 *.csv
