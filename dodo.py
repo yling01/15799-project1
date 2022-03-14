@@ -6,7 +6,6 @@ def task_project1_setup():
 
     def install_packages():
         os.system("pip3 install psycopg2")
-        os.system("pip3 install pandas")
         os.system("pip3 install sql-metadata")
 
     return {
@@ -71,8 +70,6 @@ def task_project1():
         cur.close()
         conn.close()
 
-    # TODO: Need to parse the returned value to extract out the table and the columns
-    # m = re.match(r'CREATE UNIQUE INDEX (\S+) ON (\S+) USING btree \((\S+)\)', query
     def get_unique_index(cur):
         """
         Retrieve unique indices from the DB
@@ -233,7 +230,7 @@ def task_project1():
             print("\t{: <80}{: <10}".format(index, str(count)))
         print("-" * 120)
 
-    def dump_index_info(indices):
+    def print_build_index_statements(indices):
         print("=" * 120)
         print("\n")
         print("{: >50}".format("Dump candidate indices..."))
@@ -245,7 +242,7 @@ def task_project1():
             print("{: <20}{: <80}".format(type, statement))
         print("-" * 120)
 
-    def generate_index(candidate_indices):
+    def generate_build_index_statements(candidate_indices):
         statements = []
         for candidate_index in candidate_indices:
             simple_index_list = candidate_index.split("+")
@@ -350,7 +347,7 @@ def task_project1():
         for candidate_indices in candidate_indices_to_percent_usage:
             print(candidate_indices)
 
-        statements = generate_index(list(candidate_indices_to_percent_usage.keys()))
+        statements = generate_build_index_statements(list(candidate_indices_to_percent_usage.keys()))
 
         close_connection(conn, cur)
 
@@ -363,7 +360,7 @@ def task_project1():
             print("\n")
             dump_predicate_info(update_target, "Update target")
             print("\n")
-            dump_index_info(statements)
+            print_build_index_statements(statements)
             print("\n")
 
     return {
