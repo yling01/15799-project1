@@ -4,7 +4,6 @@ import os
 
 
 def task_project1_setup():
-
     def install_packages():
         os.system("pip3 install psycopg2")
         os.system("pip3 install sql-metadata")
@@ -51,7 +50,6 @@ def task_project1():
         cur.close()
         conn.close()
 
-    # TODO: what if an existing index is a multi column index?
     def get_unique_index(cur):
         """
         Retrieve unique indices from the DB
@@ -63,12 +61,23 @@ def task_project1():
         cur.execute(
             "SELECT tablename, indexname, indexdef FROM pg_indexes WHERE schemaname='public' AND NOT indexdef LIKE '%UNIQUE%'")
         for table, index, indexdef in cur:
-            m = re.match(r'CREATE INDEX .+? ON .+? USING .+? \((?P<column>\S+)\)', indexdef)
+            m = re.match(r'CREATE INDEX .+? ON .+? USING .+? \((?P<column>.+?)\)', indexdef)
             if m is None:
                 print("\t\t\nERROR: PATTERN MATCH FAILED, EXISITING INDEX {} NOT PARSED!".format(index))
                 continue
-            table_dot_column = ".".join((table, m.group('column')))
-            existing_indices.append((table_dot_column, index))
+            """
+            Assume the pattern match 'column' group contains 
+                
+                    column1, column2, column3
+                    
+            if the table has multi-column index.
+            
+            This also works if the table only has single-column index.
+            """
+            columns = m.group('column').split(",")
+            table_dot_column_list = list(map(lambda x: ".".join((table, x.strip())), columns))
+            table_dot_column_list.sort()
+            existing_indices.append(("+".join(table_dot_column_list), index))
         return existing_indices
 
     def filter_csv(workload_csv, col=13):
@@ -184,14 +193,14 @@ def task_project1():
         print("{: >50}".format("Dump workload information..."))
         print("\n")
         print("-" * 120)
-        print("\t{:<80}{:>10}".format("Description", "metric"))
+        print("\t{:<80}{:<10}".format("Description", "metric"))
         print("-" * 120)
-        print("\t{:<80}{:>10}".format("num queries", str(num_queries)))
-        print("\t{:<80}{:10.3f}%".format("queries with predicate", num_queries_with_predicates / num_queries * 100))
-        print("\t{:<80}{:10.3f}%".format("delete", num_delete / num_queries * 100))
-        print("\t{:<80}{:10.3f}%".format("update", num_update / num_queries * 100))
-        print("\t{:<80}{:10.3f}%".format("insert", num_insert / num_queries * 100))
-        print("\t{:<80}{:10.3f}%".format("select", num_select / num_queries * 100))
+        print("\t{:<80}{:<10}".format("num queries", str(num_queries)))
+        print("\t{:<80}{:<10.3f}%".format("queries with predicate", num_queries_with_predicates / num_queries * 100))
+        print("\t{:<80}{:<10.3f}%".format("delete", num_delete / num_queries * 100))
+        print("\t{:<80}{:<10.3f}%".format("update", num_update / num_queries * 100))
+        print("\t{:<80}{:<10.3f}%".format("insert", num_insert / num_queries * 100))
+        print("\t{:<80}{:<10.3f}%".format("select", num_select / num_queries * 100))
         print("-" * 120)
 
     def dump_predicate_info(counter, description):
@@ -207,10 +216,10 @@ def task_project1():
         print("{: >50}".format(description))
         print("\n")
         print("-" * 120)
-        print("\t{: <80}{: <10}".format("Column", "Count"))
+        print("\t{:<80}{:<10}".format("Column", "Count"))
         print("-" * 120)
         for index, count in counter:
-            print("\t{: <80}{: <10}".format(index, str(count)))
+            print("\t{:<80}{:<10}".format(index, str(count)))
         print("-" * 120)
 
     def print_statements(statements, description):
@@ -222,14 +231,14 @@ def task_project1():
         """
         print("=" * 120)
         print("\n")
-        print("{: >50}".format("Dump build_statements..."))
+        print("{: >50}".format("Dump statements..."))
         print("{: >50}".format(description))
         print("\n")
         print("-" * 120)
-        print("{: >10}{: >100}".format("Type", "Statement"))
+        print("\t{:<30}{:<100}".format("Type", "Statement"))
         print("-" * 120)
         for type, statement in statements:
-            print("{: <10}{: >100}".format(type, statement))
+            print("\t{:<30}{:<100}".format(type, statement))
         print("-" * 120)
 
     def generate_drop_index_statements(candidate_indices):
@@ -367,17 +376,23 @@ def task_project1():
         Note that if the current index is not one of the recommended indices but made up of one of the 
         recommended indices, we keep it. 
         """
-        #TODO: This only works for single column indexes
         for table_dot_column, index in current_indices:
-            if table_dot_column not in simple_to_composite_index or len(simple_to_composite_index[table_dot_column]) == 0:
-                indices_to_remove.append(index)
+            # if the index is multi-column, check using candidate_indices_to_percent_usage
+            if "+" in table_dot_column:
+                if table_dot_column not in candidate_indices_to_percent_usage:
+                    indices_to_remove.append(index)
+            # if the index is single-column, check using simple_to_composite_index
+            else:
+                if table_dot_column not in simple_to_composite_index or len(
+                        simple_to_composite_index[table_dot_column]) == 0:
+                    indices_to_remove.append(index)
 
         drop_statements = generate_drop_index_statements(indices_to_remove)
 
         if verbose:
             print("=" * 120)
             print("\n")
-            print("{:<50} Following indices are recommended after analyzing update queries")
+            print("{:<50}".format("Following indices are recommended after analyzing update queries"))
             print("\n")
             print("-" * 120)
             for candidate_indices in candidate_indices_to_percent_usage:
@@ -413,7 +428,6 @@ def task_project1():
                 f.write(s)
                 f.write(";")
                 f.write("\n")
-
 
     return {
         # A list of actions. This can be bash or Python callables.
