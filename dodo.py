@@ -13,6 +13,14 @@ def task_project1_setup():
         "actions": [
             install_packages,
         ],
+        'params': [
+            {
+                'name': 'timeout',
+                'long': 'timeout',
+                'short': 't',
+                'default': '1m'
+            },
+        ],
         # Always rerun this task.
         "uptodate": [False],
         'verbosity': 2,
