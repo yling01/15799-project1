@@ -4,14 +4,12 @@ import os
 
 
 def task_project1_setup():
-    def install_packages():
-        os.system("pip3 install psycopg2")
-        os.system("pip3 install sql-metadata")
 
     return {
         # A list of actions. This can be bash or Python callables.
         "actions": [
-            install_packages,
+            "pip3 install psycopg2",
+            "pip3 install sql-metadata",
         ],
         'params': [
             {
