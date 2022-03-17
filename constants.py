@@ -13,8 +13,8 @@ COMMIT = "commit"
 """
 If a column is updated more than UPDATE_CUTOFF.
 a candidate index is no longer considered if 
-    * a composite index is referenced less than COMPOSITE_REFERENCE_CUTOFF_HIGH
-    * a simple index is referenced less than SIMPLE_REFERENCE_CUT_OFF_HIGH
+    * a composite index (multi-column index) is referenced less than COMPOSITE_REFERENCE_CUTOFF_HIGH
+    * a simple index (single-column index) is referenced less than SIMPLE_REFERENCE_CUT_OFF_HIGH
 """
 UPDATE_CUTOFF = 0.05
 COMPOSITE_REFERENCE_CUTOFF_HIGH = 0.2

@@ -29,6 +29,8 @@ def task_project1():
     import pandas as pd
     import re
 
+    # still raises ModuleNotFoundError error
+    # even when the modules are explicitly installed during setup
     try:
         import psycopg2
     except Exception:
