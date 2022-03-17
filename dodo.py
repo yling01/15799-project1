@@ -1,14 +1,15 @@
 import constants as K
 import time
 import os
-import re
-import collections
+
 
 def task_project1_setup():
 
     return {
         # A list of actions. This can be bash or Python callables.
         "actions": [
+            "pip3 install psycopg2",
+            "pip3 install sql-metadata",
         ],
         'params': [
             {
@@ -25,19 +26,13 @@ def task_project1_setup():
 
 
 def task_project1():
-
+    import collections
     import pandas as pd
-    try:
-        import psycopg2
-    except Exception:
-        os.system('pip3 install psycopg2')
-        import psycopg2
+    import psycopg2
+    from sql_metadata import Parser
+    import re
 
-    try:
-        from sql_metadata import Parser
-    except:
-        os.system("pip3 install sql_metadata")
-        from sql_metadata import Parser
+
 
     def establish_connection(database="project1db", user="project1user", password="project1pass"):
         """
