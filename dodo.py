@@ -130,9 +130,6 @@ def task_project1():
             all_queries[all_queries.str.contains(K.INSERT, case=False)],
         ))
 
-        print(all_queries)
-        exit(1)
-
 
         # obtain pure sql queries
         clean_queries = all_queries.apply(lambda x: x.split(":")[1])
