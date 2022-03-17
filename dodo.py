@@ -32,7 +32,9 @@ def task_project1():
     from sql_metadata import Parser
     import re
 
-
+    def install_package():
+        os.system('pip3 install --upgrade psycopg2')
+        os.system('pip3 install --upgrade sql_metadata')
 
     def establish_connection(database="project1db", user="project1user", password="project1pass"):
         """
@@ -112,8 +114,12 @@ def task_project1():
                 # no column contains queries, raise KeyError
                 raise KeyError
 
-        all_queries = all_queries[~all_queries.str.contains(K.BEGIN, case=False)]
-        all_queries = all_queries[~all_queries.str.contains(K.COMMIT, case=False)]
+        all_queries = pd.concat((
+            all_queries[all_queries.str.contains(K.SELECT, case=False)],
+            all_queries[all_queries.str.contains(K.DELETE, case=False)],
+            all_queries[all_queries.str.contains(K.UPDATE, case=False)],
+            all_queries[all_queries.str.contains(K.INSERT, case=False)],
+        ))
 
         # obtain pure sql queries
         clean_queries = all_queries.apply(lambda x: x.split(":")[1])
