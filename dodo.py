@@ -1,5 +1,6 @@
 import constants as K
 import time
+import os
 
 def task_project1_setup():
 
@@ -26,9 +27,19 @@ def task_project1_setup():
 def task_project1():
     import collections
     import pandas as pd
-    import psycopg2
-    from sql_metadata import Parser
     import re
+
+    try:
+        import psycopg2
+    except Exception:
+        os.system("pip install psycopg2-binary")
+        import psycopg2
+
+    try:
+        from sql_metadata import Parser
+    except Exception:
+        os.system("pip install sql-metadata")
+        from sql_metadata import Parser
 
     def establish_connection(database="project1db", user="project1user", password="project1pass"):
         """
