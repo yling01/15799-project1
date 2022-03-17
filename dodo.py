@@ -1,15 +1,13 @@
 import constants as K
 import time
-import os
-
 
 def task_project1_setup():
 
     return {
         # A list of actions. This can be bash or Python callables.
         "actions": [
-            "pip3 install psycopg2",
-            "pip3 install sql-metadata",
+            "pip install psycopg2-binary",
+            "pip install sql-metadata",
         ],
         'params': [
             {
@@ -31,10 +29,6 @@ def task_project1():
     import psycopg2
     from sql_metadata import Parser
     import re
-
-    def install_package():
-        os.system('pip3 install --upgrade psycopg2')
-        os.system('pip3 install --upgrade sql_metadata')
 
     def establish_connection(database="project1db", user="project1user", password="project1pass"):
         """
