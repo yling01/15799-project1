@@ -46,7 +46,7 @@ def task_project1():
             conn: connection
             cur: cursor
         """
-        conn = psycopg2.connect(f'dbname={database} user={user} password={password}')
+        conn = psycopg2.connect(f'dbname={database} user={user} password={password} host=localhost')
         cur = conn.cursor()
         return conn, cur
 
