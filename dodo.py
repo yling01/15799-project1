@@ -111,13 +111,15 @@ def task_project1():
 
         # default column does not contain queries, check all other columns
         if not all_queries.str.contains(K.STATEMENT).any():
+            all_queries = None
             print("Default col {} does not contain queries, checking other columns".format(col))
-            df = pd.read_csv(workload_csv, header=None)
-            for c in range(len(df.colums)):
+            df = pd.read_csv(workload_csv, header=None, dtype=str)
+            for c in df:
                 content = df[c]
                 if content.str.contains(K.STATEMENT).any():
                     all_queries = content
                     break
+            if all_queries is None:
                 # no column contains queries, raise KeyError
                 raise KeyError
 
@@ -127,6 +129,10 @@ def task_project1():
             all_queries[all_queries.str.contains(K.UPDATE, case=False)],
             all_queries[all_queries.str.contains(K.INSERT, case=False)],
         ))
+
+        print(all_queries)
+        exit(1)
+
 
         # obtain pure sql queries
         clean_queries = all_queries.apply(lambda x: x.split(":")[1])
